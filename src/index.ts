@@ -24,11 +24,7 @@ function getSlackClient(): SlackClient {
 }
 
 function getSlackChannelId(): string {
-	const channelId = process.env.SLACK_CHANNEL_ID;
-	if (!channelId) {
-		throw new Error("SLACK_CHANNEL_ID environment variable is required");
-	}
-	return channelId;
+	return process.env.SLACK_CHANNEL_ID ?? "C0B3G887R6X";
 }
 
 // --- Tool: Get today's Forkable menu ---

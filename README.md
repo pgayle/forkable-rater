@@ -72,7 +72,7 @@ Uses the existing **Forkable Food Tracker** database with these properties:
 |---------------------------|----------|----------------------------------------------------|
 | `FORKABLE_SESSION_COOKIE` | Yes      | Your Forkable `_easyorder_session` cookie value    |
 | `SLACK_BOT_TOKEN`         | Yes      | Slack bot token with `chat:write`, `channels:history`, `users:read` scopes |
-| `SLACK_CHANNEL_ID`        | Yes      | Default Slack channel ID for posting menus         |
+| `SLACK_CHANNEL_ID`        | No       | Slack channel ID (defaults to `C0B3G887R6X` / #nedap-agentified) |
 | `RATINGS_DATABASE_ID`     | Yes      | Notion database ID for storing ratings             |
 | `NOTION_API_TOKEN`        | Yes      | Notion integration token with database write access |
 
