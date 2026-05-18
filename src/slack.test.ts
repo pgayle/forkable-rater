@@ -135,4 +135,85 @@ describe("SlackClient", () => {
 			});
 		});
 	});
+
+	describe("getRatingMessages", () => {
+		it("filters messages containing 'RateThis' (case-insensitive) and strips the keyword", async () => {
+			mockSlackApi({
+				messages: [
+					{ ts: "111", text: "RateThis Chicken Bowl 4/5 great flavor", user: "U123" },
+					{ ts: "222", text: "Just chatting about lunch", user: "U456" },
+					{ ts: "333", text: "ratethis Tofu Bowl 5/5", user: "U789" },
+					{ ts: "444", text: "RATETHIS Salmon Plate 3/5 - too salty", user: "U123" },
+				],
+			});
+			// User lookups for 3 matching messages (U123 cached after first)
+			mockSlackApi({ user: { id: "U123", real_name: "Alice", name: "alice" } });
+			// Permalink for msg 111
+			mockSlackApi({ permalink: "https://slack.com/archives/C123/p111" });
+			// User lookup for U789
+			mockSlackApi({ user: { id: "U789", real_name: "Charlie", name: "charlie" } });
+			// Permalink for msg 333
+			mockSlackApi({ permalink: "https://slack.com/archives/C123/p333" });
+			// Permalink for msg 444 (U123 cached)
+			mockSlackApi({ permalink: "https://slack.com/archives/C123/p444" });
+
+			const client = new SlackClient(SLACK_TOKEN);
+			const result = await client.getRatingMessages("C123", 50);
+
+			expect(result.success).toBe(true);
+			expect(result.ratingMessages).toHaveLength(3);
+
+			expect(result.ratingMessages[0]).toMatchObject({
+				ratingText: "Chicken Bowl 4/5 great flavor",
+				userName: "Alice",
+				permalink: "https://slack.com/archives/C123/p111",
+			});
+
+			expect(result.ratingMessages[1]).toMatchObject({
+				ratingText: "Tofu Bowl 5/5",
+				userName: "Charlie",
+				permalink: "https://slack.com/archives/C123/p333",
+			});
+
+			expect(result.ratingMessages[2]).toMatchObject({
+				ratingText: "Salmon Plate 3/5 - too salty",
+				userName: "Alice",
+				permalink: "https://slack.com/archives/C123/p444",
+			});
+		});
+
+		it("returns empty when no messages contain RateThis", async () => {
+			mockSlackApi({
+				messages: [
+					{ ts: "111", text: "Just a normal message", user: "U123" },
+					{ ts: "222", text: "Rating this meal 5/5", user: "U456" },
+				],
+			});
+
+			const client = new SlackClient(SLACK_TOKEN);
+			const result = await client.getRatingMessages("C123", 50);
+
+			expect(result.success).toBe(true);
+			expect(result.ratingMessages).toHaveLength(0);
+			expect(result.message).toContain("0 rating messages");
+		});
+
+		it("matches RateThis as a whole word only", async () => {
+			mockSlackApi({
+				messages: [
+					{ ts: "111", text: "Don't RateThis poorly: Burger 2/5", user: "U123" },
+					{ ts: "222", text: "someRateThisstuff won't match", user: "U456" },
+				],
+			});
+			// Only first message matches (word boundary)
+			mockSlackApi({ user: { id: "U123", real_name: "Alice", name: "alice" } });
+			mockSlackApi({ permalink: "https://slack.com/archives/C123/p111" });
+
+			const client = new SlackClient(SLACK_TOKEN);
+			const result = await client.getRatingMessages("C123", 50);
+
+			expect(result.ratingMessages).toHaveLength(1);
+			expect(result.ratingMessages[0].ratingText).toBe("Don't  poorly: Burger 2/5");
+		});
+	});
 });

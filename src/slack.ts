@@ -41,6 +41,12 @@ interface SlackUserInfoResponse extends SlackResponse {
 	user?: SlackUserInfo;
 }
 
+interface SlackPermalinkResponse extends SlackResponse {
+	permalink?: string;
+}
+
+const RATETHIS_PATTERN = /\bratethis\b/i;
+
 export interface SlackMessageInfo {
 	ts: string;
 	text: string;
@@ -63,6 +69,23 @@ export interface GetMessagesResult {
 	message: string;
 	channelId: string;
 	messages: SlackMessageInfo[];
+	[key: string]: JsonValue;
+}
+
+export interface RatingMessage {
+	ts: string;
+	ratingText: string;
+	userId: string | null;
+	userName: string | null;
+	permalink: string | null;
+	[key: string]: JsonValue;
+}
+
+export interface CollectRatingsResult {
+	success: boolean;
+	message: string;
+	channelId: string;
+	ratingMessages: RatingMessage[];
 	[key: string]: JsonValue;
 }
 
@@ -97,7 +120,7 @@ function formatMenuForSlack(menu: DayMenuResult): string {
 		lines.push("");
 	}
 
-	lines.push("_Reply to this message with your ratings! e.g. \"Chicken Bowl: 4/5\"_");
+	lines.push("_Reply with `RateThis <dish> <rating>/5` to log your rating!_");
 	return lines.join("\n");
 }
 
@@ -206,6 +229,82 @@ export class SlackClient {
 			message: `Retrieved ${resolvedMessages.length} messages`,
 			channelId,
 			messages: resolvedMessages,
+		};
+	}
+
+	async getRatingMessages(
+		channelId: string,
+		limit: number = 100,
+		threadTs?: string,
+	): Promise<CollectRatingsResult> {
+		let messages: SlackMessage[];
+
+		if (threadTs) {
+			const result = await this.slackApi<SlackConversationsRepliesResponse>(
+				"conversations.replies",
+				{ channel: channelId, ts: threadTs, limit },
+			);
+			messages = (result.messages ?? []).filter((m) => m.ts !== threadTs);
+		} else {
+			const result = await this.slackApi<SlackConversationsHistoryResponse>(
+				"conversations.history",
+				{ channel: channelId, limit },
+			);
+			messages = result.messages ?? [];
+		}
+
+		const ratingMsgs = messages.filter((m) => RATETHIS_PATTERN.test(m.text));
+
+		const userCache = new Map<string, string>();
+		const ratingMessages: RatingMessage[] = [];
+
+		for (const msg of ratingMsgs) {
+			let userName: string | null = null;
+			if (msg.user) {
+				if (userCache.has(msg.user)) {
+					userName = userCache.get(msg.user)!;
+				} else {
+					try {
+						const userResult = await this.slackApi<SlackUserInfoResponse>(
+							"users.info",
+							{ user: msg.user },
+						);
+						userName = userResult.user?.real_name ?? userResult.user?.name ?? null;
+						if (userName) userCache.set(msg.user, userName);
+					} catch {
+						// skip
+					}
+				}
+			}
+
+			let permalink: string | null = null;
+			try {
+				const linkResult = await this.slackApi<SlackPermalinkResponse>(
+					"chat.getPermalink",
+					{ channel: channelId, message_ts: msg.ts },
+				);
+				permalink = linkResult.permalink ?? null;
+			} catch {
+				// skip
+			}
+
+			// Strip the "RateThis" keyword to give the agent just the rating content
+			const ratingText = msg.text.replace(RATETHIS_PATTERN, "").trim();
+
+			ratingMessages.push({
+				ts: msg.ts,
+				ratingText,
+				userId: msg.user ?? null,
+				userName,
+				permalink,
+			});
+		}
+
+		return {
+			success: true,
+			message: `Found ${ratingMessages.length} rating messages out of ${messages.length} scanned`,
+			channelId,
+			ratingMessages,
 		};
 	}
 }

@@ -1,7 +1,7 @@
 import { Worker, j } from "@notionhq/workers";
 import type { DayMenuResult } from "./forkable.js";
 import { ForkableClient } from "./forkable.js";
-import type { GetMessagesResult, PostMenuResult } from "./slack.js";
+import type { CollectRatingsResult, GetMessagesResult, PostMenuResult } from "./slack.js";
 import { SlackClient } from "./slack.js";
 
 const worker = new Worker();
@@ -108,6 +108,42 @@ worker.tool<GetSlackMessagesInput, GetMessagesResult>("getSlackMessages", {
 		return getSlackClient().getRecentMessages(
 			channelId ?? getSlackChannelId(),
 			limit ?? 50,
+			threadTs ?? undefined,
+		);
+	},
+});
+
+// --- Tool: Collect "RateThis" messages from Slack ---
+
+type CollectRatingsInput = {
+	channelId: string | null;
+	limit: number | null;
+	threadTs: string | null;
+	[key: string]: string | number | null;
+};
+
+worker.tool<CollectRatingsInput, CollectRatingsResult>("collectRatings", {
+	title: "Collect Ratings From Slack",
+	description:
+		'Scans recent Slack messages for the keyword "RateThis" (any casing: ratethis, RATETHIS, rateThis, etc.). Returns only matching messages with the keyword stripped, the user\'s name, and a permalink to the Slack message. The agent should parse each ratingText to extract the dish name, rating, and any notes, then call addMealRating for each.',
+	schema: j.object({
+		channelId: j
+			.string()
+			.nullable()
+			.describe("Slack channel ID. Uses the default channel if null."),
+		limit: j
+			.number()
+			.nullable()
+			.describe("Max messages to scan. Defaults to 100."),
+		threadTs: j
+			.string()
+			.nullable()
+			.describe("Thread timestamp to scan replies from, or null for the main channel."),
+	}),
+	execute: async ({ channelId, limit, threadTs }) => {
+		return getSlackClient().getRatingMessages(
+			channelId ?? getSlackChannelId(),
+			limit ?? 100,
 			threadTs ?? undefined,
 		);
 	},
