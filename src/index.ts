@@ -113,18 +113,26 @@ worker.tool<GetSlackMessagesInput, GetMessagesResult>("getSlackMessages", {
 	},
 });
 
-// --- Tool: Add a meal rating to a Notion database ---
+// --- Tool: Add a meal rating to the Forkable Food Tracker database ---
+
+const STAR_RATINGS: Record<number, string> = {
+	1: "⭐ 1 Star",
+	2: "⭐⭐ 2 Stars",
+	3: "⭐⭐⭐ 3 Stars",
+	4: "⭐⭐⭐⭐ 4 Stars",
+	5: "⭐⭐⭐⭐⭐ 5 Stars",
+};
 
 type AddRatingInput = {
-	mealName: string;
+	dishName: string;
 	restaurantName: string | null;
 	rating: number;
-	maxRating: number | null;
 	date: string;
-	reviewer: string | null;
-	location: string | null;
+	cuisineType: string | null;
+	wouldOrderAgain: boolean | null;
 	notes: string | null;
-	[key: string]: string | number | null;
+	slackLink: string | null;
+	[key: string]: string | number | boolean | null;
 };
 
 type AddRatingResult = {
@@ -136,19 +144,26 @@ type AddRatingResult = {
 worker.tool<AddRatingInput, AddRatingResult>("addMealRating", {
 	title: "Add Meal Rating",
 	description:
-		"Adds a meal rating to the configured Notion ratings database. Call this for each rating extracted from Slack messages. The rating should be normalized to a 1-5 scale.",
+		"Adds a meal rating to the Forkable Food Tracker Notion database. Call this for each rating extracted from Slack messages. Rating must be 1-5 (integer). Matches the existing database schema: Dish Name (title), Rating (select: 1-5 stars), Restaurant, Date Tried, Cuisine Type, Would Order Again, Notes, Slack Link.",
 	schema: j.object({
-		mealName: j.string().describe("Name of the meal being rated."),
+		dishName: j.string().describe("Name of the dish being rated."),
 		restaurantName: j.string().nullable().describe("Name of the restaurant."),
-		rating: j.number().describe("Rating value, normalized to 1-5 scale."),
-		maxRating: j
+		rating: j
 			.number()
+			.describe("Rating from 1 to 5 (integer). Will be mapped to the star select options."),
+		date: j.string().describe("Date the meal was tried in YYYY-MM-DD format."),
+		cuisineType: j
+			.string()
 			.nullable()
-			.describe("Original max rating if not on a 5-point scale, for reference."),
-		date: j.string().describe("Date of the meal in YYYY-MM-DD format."),
-		reviewer: j.string().nullable().describe("Name of the person who rated the meal."),
-		location: j.string().nullable().describe("Office location (e.g., NY, SF)."),
+			.describe(
+				"Cuisine type. One of: Italian, Japanese, Mexican, American, Thai, Indian, Chinese, Mediterranean, French, Korean.",
+			),
+		wouldOrderAgain: j
+			.boolean()
+			.nullable()
+			.describe("Whether the person would order this dish again."),
 		notes: j.string().nullable().describe("Any additional notes or comments about the meal."),
+		slackLink: j.string().nullable().describe("Link to the Slack message with the rating."),
 	}),
 	execute: async (input) => {
 		const databaseId = process.env.RATINGS_DATABASE_ID;
@@ -167,10 +182,18 @@ worker.tool<AddRatingInput, AddRatingResult>("addMealRating", {
 			};
 		}
 
+		const starRating = STAR_RATINGS[Math.round(Math.max(1, Math.min(5, input.rating)))];
+		if (!starRating) {
+			return {
+				success: false,
+				message: `Invalid rating ${input.rating}. Must be 1-5.`,
+			};
+		}
+
 		const properties: Record<string, unknown> = {
-			"Meal Name": { title: [{ text: { content: input.mealName } }] },
-			Rating: { number: input.rating },
-			Date: { date: { start: input.date } },
+			"Dish Name": { title: [{ text: { content: input.dishName } }] },
+			Rating: { select: { name: starRating } },
+			"Date Tried": { date: { start: input.date } },
 		};
 
 		if (input.restaurantName) {
@@ -178,18 +201,19 @@ worker.tool<AddRatingInput, AddRatingResult>("addMealRating", {
 				rich_text: [{ text: { content: input.restaurantName } }],
 			};
 		}
-		if (input.reviewer) {
-			properties["Reviewer"] = {
-				rich_text: [{ text: { content: input.reviewer } }],
-			};
+		if (input.cuisineType) {
+			properties["Cuisine Type"] = { select: { name: input.cuisineType } };
 		}
-		if (input.location) {
-			properties["Location"] = { select: { name: input.location } };
+		if (input.wouldOrderAgain != null) {
+			properties["Would Order Again"] = { checkbox: input.wouldOrderAgain };
 		}
 		if (input.notes) {
 			properties["Notes"] = {
 				rich_text: [{ text: { content: input.notes } }],
 			};
+		}
+		if (input.slackLink) {
+			properties["Slack Link"] = { url: input.slackLink };
 		}
 
 		const response = await fetch("https://api.notion.com/v1/pages", {
@@ -215,7 +239,7 @@ worker.tool<AddRatingInput, AddRatingResult>("addMealRating", {
 
 		return {
 			success: true,
-			message: `Added rating for "${input.mealName}" (${input.rating}/5) by ${input.reviewer ?? "anonymous"}`,
+			message: `Added rating for "${input.dishName}" (${starRating}) to Forkable Food Tracker`,
 		};
 	},
 });

@@ -35,34 +35,36 @@ Reads recent messages from a Slack channel or thread. The agent uses this to fin
 
 ### `addMealRating`
 
-Adds a meal rating to the Notion ratings database.
+Adds a meal rating to the Forkable Food Tracker Notion database.
 
 ```json
 {
-  "mealName": "Chicken Bowl",
+  "dishName": "Chicken Bowl",
   "restaurantName": "Cafe Good",
   "rating": 4,
-  "maxRating": null,
   "date": "2026-05-19",
-  "reviewer": "Alice",
-  "location": "NY",
-  "notes": "Great flavors, slightly cold"
+  "cuisineType": "American",
+  "wouldOrderAgain": true,
+  "notes": "Great flavors, slightly cold",
+  "slackLink": null
 }
 ```
 
 ## Notion Database Schema
 
-Create a Notion database with these properties:
+Uses the existing **Forkable Food Tracker** database with these properties:
 
-| Property    | Type      | Description              |
-|-------------|-----------|--------------------------|
-| Meal Name   | Title     | Name of the meal         |
-| Rating      | Number    | Rating (1–5 scale)       |
-| Date        | Date      | Date of the meal         |
-| Restaurant  | Text      | Restaurant name          |
-| Reviewer    | Text      | Who submitted the rating |
-| Location    | Select    | Office location          |
-| Notes       | Text      | Additional comments      |
+| Property         | Type     | Description                                        |
+|------------------|----------|----------------------------------------------------|
+| Dish Name        | Title    | Name of the dish                                   |
+| Rating           | Select   | Star rating (⭐ 1 Star through ⭐⭐⭐⭐⭐ 5 Stars) |
+| Restaurant       | Text     | Restaurant name                                    |
+| Date Tried       | Date     | Date the meal was tried                            |
+| Cuisine Type     | Select   | Italian, Japanese, Mexican, etc.                   |
+| Submitted By     | Person   | Who submitted the rating                           |
+| Would Order Again| Checkbox | Whether they'd order again                         |
+| Notes            | Text     | Additional comments                                |
+| Slack Link       | URL      | Link to the Slack rating message                   |
 
 ## Environment Variables
 
